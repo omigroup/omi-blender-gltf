@@ -4,7 +4,7 @@ This guide is written for use with Visual Studio Code. If you're not using VSCod
 
 ## Getting Started
 
-Install Blender 2.93.1
+Install Blender 2.93.2
 
 Download the latest glTF Blender addon and copy the `addons/io_scene_gltf2` folder into the `scripts/addons/` directory of the Blender installation, then enable it under the Add-ons tab.
 
