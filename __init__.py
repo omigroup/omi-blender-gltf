@@ -1,6 +1,3 @@
-from .extensions.OMI_audio_emitter import OMIAudioEmitterExtension
-from .extensions.OMI_physics import OMIPhysicsExtension
-
 bl_info = {
     "name" : "OMI Blender Exporter",
     "author" : "OMI Group",
@@ -12,16 +9,30 @@ bl_info = {
     "category" : "Generic"
 }
 
+from .extensions import queryExtensions
 extensions = []
 
 def register():
-    # TODO: Dynamically load and instantiate extensions
-    extensions = [
-        OMIAudioEmitterExtension(),
-        OMIPhysicsExtension()
-    ]
+    autodetected = queryExtensions()
+    print("[OMI]", autodetected)
+    for Ext in autodetected:
+        if hasattr(Ext, 'register'):
+            Ext.register()
+        else:
+            print("Warning -- no .register found", Ext)
+        instance = Ext()
+        # print("[OMI]", instance.__module__)
+        extensions.append(instance)
+    print("[OMI] extensions:", [ext.__module__ for ext in extensions])
+    # class tmp: extensions = {}
+    # extensions[0].gather_gltf_hook(tmp(), {})
 
 def unregister():
+    for extension in extensions:
+        if hasattr(extension.__class__, 'unregister'):
+            extension.__class__.unregister()
+        else:
+            print("Warning -- no .unregister found", extension.__class__)
     extensions = []
 
 class glTF2ExportUserExtension:

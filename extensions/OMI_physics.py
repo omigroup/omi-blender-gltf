@@ -1,13 +1,13 @@
-from io_scene_gltf2.io.com.gltf2_io_extensions import Extension
+from . import OMIExtension
 
-class OMIPhysicsExtension:
-
+ID = "OMI_physics"
+class OMIPhysicsExtension(OMIExtension):
     def gather_gltf_hook(self, gltf2_object, export_settings):
         if gltf2_object.extensions is None:
                 gltf2_object.extensions = {}
 
-        gltf2_object.extensions["OMI_physics"] = Extension(
-            name="OMI_physics",
+        gltf2_object.extensions[ID] = Extension(
+            name=ID,
             extension={"test": 1},
             required=False
         )
@@ -16,8 +16,8 @@ class OMIPhysicsExtension:
         if gltf2_object.extensions is None:
             gltf2_object.extensions = {}
 
-        gltf2_object.extensions["OMI_physics"] = Extension(
-            name="OMI_physics",
+        gltf2_object.extensions[ID] = Extension(
+            name=ID,
             extension={"test": 123},
             required=False
         )
