@@ -72,6 +72,7 @@ class AudioClipProperties(bpy.types.PropertyGroup):
 
 class AudioClipArrayProperty(bpy.types.PropertyGroup):
     value: bpy.props.CollectionProperty(name="value", type=AudioClipProperties)
+    enabled: bpy.props.BoolProperty(name="enabled")
 
 class AddAudioClip(bpy.types.Operator):
     bl_idname = "wm.add_audio_clip"
@@ -160,45 +161,43 @@ class ClipsOperator(bpy.types.Operator):
         return {"FINISHED"}  
 
 # Object custom property panel
+
 class ObjectEmitterPanel(bpy.types.Panel):
-    bl_label = '[OMI] Audio Emitter'
+    bl_label = 'Audio Emitter'
     bl_idname = "NODE_PT_OMI_object_audio_emitter"
+    bl_parent_id = "NODE_PT_OMI_extensions"
     bl_space_type = 'PROPERTIES'
+    # bl_options = {'HIDE_HEADER'}
     bl_region_type = 'WINDOW'
     bl_context = 'object'
 
     def draw(self, context):
-        self._draw(context, context.object)
+        box = self.layout.box()
+        # box.label(text="asdfasdf")
+        self._draw(context, box, context.object)
 
-    def _draw(self, context, object):
-        layout = self.layout
+    def _draw(self, context, layout, object):
         emitter = object.OMI_audio_emitter
         clip = OMIAudioEmitterExtension.findClipByIndex(context, emitter.clip_index)
         ClipsOperator.target = object
-        layout.operator_menu_enum(ClipsOperator.bl_idname, "clip", text=clip.name if clip else "", icon="SCENE")
+        row = layout.split(factor=0.85)
+        row.operator_menu_enum(ClipsOperator.bl_idname, "clip", text=clip.name if clip else "", icon="SCENE")
+        op = row.operator("wm.omi_preview_emitter", icon="PLAY", text="")
+        PreviewEmitter.target = object
         layout.label(text="index: " + str(emitter.clip_index))
         if True: #clip:
             layout.prop(emitter, 'type')
             layout.prop(emitter, 'volume')
             layout.prop(emitter, 'muted')
-            op = layout.operator("wm.omi_preview_emitter", icon="PLAY")
-            PreviewEmitter.target = object
+            # op = layout.operator("wm.omi_preview_emitter", icon="PLAY")
+            # PreviewEmitter.target = object
         #op.object_path = hashObject(object)
 
 # Scene custom property
-class SceneEmitterPanel(bpy.types.Panel):
-    bl_label = '[OMI] Audio Emitter'
-    bl_idname = "NODE_PT_OMI_scene_audio_emitter"
-    bl_space_type = 'PROPERTIES'
-    bl_region_type = 'WINDOW'
-    bl_context = 'scene'
-
-    def draw(self, context):
-        ObjectEmitterPanel._draw(self, context, context.scene)
-
-class SceneClipsPanel(bpy.types.Panel):
-    bl_label = '[OMI] Audio Clips'
-    bl_idname = "NODE_PT_OMI_audio_clips"
+class SceneAudioClipsPanel(bpy.types.Panel):
+    bl_label = 'Audio Clips'
+    bl_idname = "NODE_PT_OMI_scene_audio_clips"
+    bl_parent_id = "NODE_PT_OMI_scene_extensions"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = 'scene'
@@ -221,6 +220,48 @@ class SceneClipsPanel(bpy.types.Panel):
             icon="ADD"
         )
 
+class SceneEmitterPanel(bpy.types.Panel):
+    bl_label = 'Audio Emitter'
+    bl_idname = "NODE_PT_OMI_scene_audio_emitter"
+    bl_parent_id = "NODE_PT_OMI_scene_extensions"
+    bl_space_type = 'PROPERTIES'
+    # bl_options = {'HIDE_HEADER'}
+    bl_region_type = 'WINDOW'
+    bl_context = 'scene'
+    def draw(self, context):
+        ObjectEmitterPanel._draw(self, context, self.layout, context.scene)
+
+### GLTF Export Screen
+class OMIAudioGLTFExportPanel(bpy.types.Panel):
+    bl_space_type = 'FILE_BROWSER'
+    bl_region_type = 'TOOL_PROPS'
+    bl_label = "OMI Audio"
+    bl_parent_id = "OMI_GLTF_PT_export_user_extensions"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    @classmethod
+    def poll(cls, context):
+        sfile = context.space_data
+        operator = sfile.active_operator
+        return operator.bl_idname == "EXPORT_SCENE_OT_gltf"
+
+    def draw_header(self, context):
+        self.layout.prop(bpy.context.scene.OMI_audio_clips, 'enabled', text="")
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        props = bpy.context.scene.OMI_audio_clips
+        layout.active = props.enabled
+
+        box = layout.box()
+        if len(bpy.context.scene.OMI_audio_clips.value) == 0:
+            box.label(text="(scene has no audio clips)")
+
+        for clip in bpy.context.scene.OMI_audio_clips.value:
+            box.label(text=clip.name)
 
 ###########################################################################
 # temporary testing -- env OMI_DEBUG=1 blender....
