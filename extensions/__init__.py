@@ -10,16 +10,44 @@ import os
 OMI_DEBUG = os.environ.get("OMI_DEBUG", False)
 
 class OMIExtension:
-    Extension = Extension
+    def import_gltf_hook(self, root, importer):
+        if OMI_DEBUG: print("OVERRIDE: import_gltf_hook", self)
+        pass
+    def import_node_hook(self, node, blender_object, import_settings):
+        if OMI_DEBUG: print("OVERRIDE: import_node_hook", self)
+        pass
 
     @staticmethod
-    def autoregister(all):
-        # autodetect registerable bpy.types 
-        for k, v in all.items():
-            name = v.__class__.__name__
-            if name == "RNAMeta" or name == "RNAMetaPropGroup":
-                if OMI_DEBUG: print("register_class", k, name)
-                bpy.utils.register_class(v)
+    def foreach(array, callback):
+        for v in array:
+            #print("foreach", callback.__name__, v)
+            try:
+                callback(v)
+            except BaseException as e:
+                print("foreach error", callback.__name__, e)
+
+    @staticmethod
+    def register_array(array):
+        print("... register_all", array)
+        OMIExtension.foreach(array, bpy.utils.register_class)
+
+    @staticmethod
+    def unregister_array(array):
+        print("... unregister_all", array)
+        OMIExtension.foreach(array, bpy.utils.unregister_class)
+    Extension = Extension
+
+OMIExtension.Extension = Extension
+
+# dynamically scan for registerable bpy.types
+def queryRegisterables(all):
+    found = []
+    for k, v in all.items():
+        name = v.__class__.__name__
+        if name == "RNAMeta" or name == "RNAMetaPropGroup":
+            if OMI_DEBUG: print("queryRegisterables match", v.__module__+"."+v.__name__, name)
+            found.append(v)
+    return found
 
 # dynamically scan for OMIExtension subclasses in the current directory
 def queryExtensions():
@@ -38,3 +66,4 @@ def queryExtensions():
                 print("found omi extension", attribute_name, attribute)
                 extensions.append(attribute)
     return extensions
+
