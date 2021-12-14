@@ -1,64 +1,104 @@
 from . import OMIExtension, queryRegisterables
 import bpy
 
+from io_scene_gltf2.io.exp.gltf2_io_binary_data import BinaryData
+
 ID = "OMI_audio_emitter"
+VERSION = "X.X.X"
 
 import json
 from collections import namedtuple, OrderedDict
 
-def json_serializable(cls):
-    def as_dict(self):
-        yield OrderedDict(
-            (name, value) for name, value in zip(
-                self._fields,
-                iter(super(cls, self).__iter__())))
-    cls.__iter__ = as_dict
-    return cls
+from ..omi_audio_utils import AudioPlayback
+import os
 
 class OMIAudioEmitterExtension(OMIExtension):
 
+    class ExportData:
+        """struct to keep track of incrementally prepared export data"""
+        def __init__(self):
+            self.audioSources = []
+            self.audioEmitters = []
+            self.sourcesByFilename = {}
+
+    def __init__(self):
+        super().__init__()
+        self.export = OMIAudioEmitterExtension.ExportData()
+        # FIXME: trying to mount properties like this currently throws an exception
+        # self.properties = bpy.context.scene.OMIExtensions
+
+    def _enabled(self):
+        # FIXME: temporary workaround; would prefer to use self.properties.enabled
+        return bpy.context.scene.OMIExtensions.enabled
+
+    def _gather_node(self, blender_object):
+        """append Object's audio information to the incremental export arrays"""
+        p = getattr(blender_object, 'OMI_audio_pair', None)
+        if not p: return
+        if not p.source.filename:
+            print("skipping pair w/o filename", p.source.name)
+            return
+        print("PROCESSING", p.source.name)
+
+        ## audioSource
+        # simple de-deduping -- identical filenames will reuse the source / index
+        sourceIndex = self.export.sourcesByFilename.get(p.source.filename, None)
+        if sourceIndex is None:
+            sourceIndex = len(self.export.audioSources)
+            self.export.sourcesByFilename[p.source.filename] = sourceIndex
+            buffer = None
+            if os.path.isfile(p.source.filename):
+                with open(p.source.filename, 'rb') as f:
+                    buffer = BinaryData(f.read())
+            mimeType = p.source.mimeType
+            if mimeType == "":
+                mimeType = "audio/mpeg"
+            self.export.audioSources.append({
+                'name': p.source.name,
+                'uri': p.source.filename,
+                'bufferView': buffer,
+                'mimeType': mimeType,
+            })
+
+        ## audioEmitter
+        c = p.emitter
+        emitterIndex = len(self.export.audioEmitters)
+        self.export.audioEmitters.append({
+            'type': c.type,
+            'gain': c.gain,
+            'loop': c.loop,
+            'autoPlay': c.autoPlay,
+            'source': sourceIndex,
+            'coneInnerAngle': c.coneInnerAngle,
+            'coneOuterAngle': c.coneOuterAngle,
+            'coneOuterGain': c.coneOuterGain,
+            'distanceModel': c.distanceModel,
+            'maxDistance': c.maxDistance,
+            'refDistance': c.refDistance,
+            'rolloffFactor': c.rolloffFactor,
+
+            'name': c.name,
+        })
+        return emitterIndex
+
+    def gather_scene_hook(self, root, blender_scene, export_settings):
+      print("GATHER_SCENE_HOOK", self)
+
     def gather_gltf_hook(self, root, export_settings):
+      print("GATHER_GLTF_HOOK", self)
+      if not self._enabled(): return
       print("[OMIAudioEmitterExtension] gather_gltf_hook", ID, root)
       try:
         if not root: return
-        audioPairs = [c.OMI_audio_pair for c in bpy.data.objects if c.OMI_audio_pair is not None ]
-        audioSources = []
-        audioEmitters = []
-        for i, p in enumerate(audioPairs):
-            print("pair", i, p.source.name)
-            audioSources.append({
-                'name': p.source.name,
-                'uri': p.source.filename,
-            #     #'bufferView': p.source.filename,
-            #     #'mimeType': p.source.filename,
-            })
-            c = p.emitter
-
-            # https://github.com/omigroup/gltf-extensions/blob/OMI_audio_emitter/extensions/2.0/OMI_audio_emitter/schema/audioEmitter.schema.json#L7
-            audioEmitters.append({
-                'type': c.type,
-                'gain': c.gain,
-                'loop': c.loop,
-                'autoPlay': c.autoPlay,
-                'source': i,
-                'coneInnerAngle': c.coneInnerAngle,
-                'coneOuterAngle': c.coneOuterAngle,
-                'coneOuterGain': c.coneOuterGain,
-                'distanceModel': c.distanceModel,
-                'maxDistance': c.maxDistance,
-                'refDistance': c.refDistance,
-                'rolloffFactor': c.rolloffFactor,
-
-                'name': c.name,
-            })
 
         print("[OMIAudioEmitterExtension] gather_gltf_hook...", root.scenes[0].extensions)
 
-        root.extensions[ID] = OMIExtension.Extension(
+        # https://github.com/omigroup/gltf-extensions/blob/OMI_audio_emitter/extensions/2.0/OMI_audio_emitter/schema/audioEmitter.schema.json#L7
+        root.extensions[ID] = self.Extension(
             name = ID,
             extension = {
-                'audioSources': audioSources,
-                'audioEmitters': audioEmitters,
+                'audioSources': self.export.audioSources,
+                'audioEmitters': self.export.audioEmitters,
             },
             required = False
         )
@@ -67,26 +107,36 @@ class OMIAudioEmitterExtension(OMIExtension):
           import traceback
           traceback.print_exc()
 
+    def gather_asset_hook(self, asset, export_settings):
+        if not self._enabled(): return
+        # TODO: incorporate add-on version somewhere
+        # asset.extras = getattr(asset, 'extras', {}) or {}
+        # asset.extras['OMI_audio_emitter'] = { 'version': VERSION }
+        print("GATHER ASSET", asset.to_dict())
+
     def gather_node_hook(self, node, blender_object, export_settings):
         # print("[OMIAudioEmitterExtension] gather_node_hook", ID, node, blender_object.__class__ == bpy.types.Scene)
 
         # NOTE: this is one way to handle scene-level extensions
-        # if blender_object.__class__ == bpy.types.Scene:
-        #     print("[OMIAudioEmitterExtension] gather_node_hook", ID, node, blender_object.__class__ == bpy.types.Scene)
-        #     node.extensions[ID] = { 'audioEmitters': [ x.emitter_index for x in bpy.context.scene.OMI_audio_emitters ] }
+        if blender_object.__class__ == bpy.types.Scene:
+            print("TODO: scene-level audio emitters", hasattr(blender_object, 'OMI_audio_pair'))
+            return
 
+        print("GATHER_NODE_HOOK", self, getattr(self, 'export', None))
+        if not self._enabled(): return
         if not node: return
-
-        if not getattr(blender_object, 'OMI_audio_pair', None):
+        emitterIndex = self._gather_node(blender_object)
+        if emitterIndex is None:
+            print("[OMIAudioEmitterExtension] ** ==== gather_node_hook -- skipping emitterIndex", emitterIndex)
             return
 
         node.extensions = getattr(node, 'extensions', {})
-        print("[OMIAudioEmitterExtension] ** gather_node_hook", ID, OMIExtension.Extension)
+        print("[OMIAudioEmitterExtension] ** gather_node_hook", ID, self.Extension)
 
-        node.extensions[ID] = OMIExtension.Extension(
+        node.extensions[ID] = self.Extension(
             name=ID,
             extension={
-                'audioEmitter': OMIAudioEmitterExtension.indexOfPair(bpy.context, blender_object.OMI_audio_pair),
+                'audioEmitter': emitterIndex
             },
             required=False
         )
@@ -108,6 +158,7 @@ class OMIAudioEmitterExtension(OMIExtension):
     def import_node_hook(self, node, blender_object, import_settings):
         extension = (node.extensions or {}).get(ID, {})
         scene = bpy.context.scene
+        print("IMPORT SETTINGS", import_settings['filepath'])
         # audioEmitters = scene.xOMI_audio_emitters.value
         if 'audioEmitter' in extension:
             emitterData = self.audioEmitters[extension['audioEmitter']]
@@ -117,7 +168,10 @@ class OMIAudioEmitterExtension(OMIExtension):
             source = blender_object.OMI_audio_pair.source
             source.name = sourceData['name']
             source.mimeType = sourceData.get('mimeType', '')
-            source.filename = sourceData.get('uri', 'bufferView:' + str(sourceData.get('bufferView', None)))
+            if 'uri' in sourceData:
+                source.filename = os.path.join(os.path.dirname(import_settings['filepath']), sourceData['uri'])
+            else:
+                source.filename = 'bufferView://' + str(sourceData.get('bufferView', None))
             
             emitter = blender_object.OMI_audio_pair.emitter
             for k in emitterData.keys():
@@ -142,6 +196,8 @@ class OMIAudioEmitterExtension(OMIExtension):
         OMIAudioEmitterExtension.registerables = queryRegisterables(globals())
         OMIExtension.register_array(OMIAudioEmitterExtension.registerables)
 
+        # bpy.types.Scene.OMIAudioExtensionProperties = bpy.props.PointerProperty(type=OMIAudioExtensionProperties)
+
         # NOTE: old scene level plumbing
         # bpy.types.Scene.OMI_audio_pairs = bpy.props.CollectionProperty(type=AudioPair)
         
@@ -154,12 +210,13 @@ class OMIAudioEmitterExtension(OMIExtension):
         OMIExtension.unregister_array(OMIAudioEmitterExtension.registerables)
         OMIAudioEmitterExtension.registerables = []
         del bpy.types.Object.OMI_audio_pair
+        # del bpy.types.Scene.OMIAudioExtensionProperties
         #del bpy.types.Scene.OMI_audio_pairs
 
-    @staticmethod
-    def indexOfPair(context, pair):
-        audioPairs = [c.OMI_audio_pair for c in bpy.data.objects if c.OMI_audio_pair is not None ]
-        return audioPairs.index(pair)
+    # @staticmethod
+    # def indexOfPair(context, pair):
+    #     audioPairs = [c.OMI_audio_pair for c in bpy.data.objects if c.OMI_audio_pair is not None ]
+    #     return audioPairs.index(pair)
 
     @staticmethod
     def gatherPairs(context):
@@ -191,8 +248,7 @@ class ResetAudioPair(bpy.types.Operator):
     def execute(self, context):
         object = ResetAudioPair.target #findObjectByHash(context, self.object_path)
         pair = object.OMI_audio_pair
-        pair.name = ''
-        pair.source.filename = ''
+        pair.reset()
         return {'FINISHED'}
 
 # .audioEmitter
@@ -223,9 +279,14 @@ class AudioEmitterProperties(bpy.types.PropertyGroup):
     refDistance: bpy.props.FloatProperty(name="refDistance")
     rolloffFactor: bpy.props.FloatProperty(name="rolloffFactor")
 
-class AudioPair(bpy.types.PropertyGroup):
+
+class AudioPair(bpy.types.PropertyGroup, AudioPlayback):
     source: bpy.props.PointerProperty(type=AudioSourceProperties)
     emitter: bpy.props.PointerProperty(type=AudioEmitterProperties)
+    def reset(self):
+        self.source.name = ''
+        self.source.filename = ''
+        self.stop()
 
 class PreviewEmitter(bpy.types.Operator):
     bl_idname = "wm.omi_preview_emitter"
@@ -237,7 +298,8 @@ class PreviewEmitter(bpy.types.Operator):
         object = PreviewEmitter.target #findObjectByHash(context, self.object_path)
         emitter = object.OMI_audio_pair.emitter
         clip = object.OMI_audio_pair.source #OMIAudioEmitterExtension.findClipByIndex(context, emitter.source)
-        self.report({'INFO'}, "TODO: Preview Emitter " + str(clip.filename if clip else clip) + "//"+str(clip))
+        self.report({'INFO'}, str(self) + " TODO: Preview Emitter " + str(clip.filename if clip else clip) + "//"+str(clip))
+        object.OMI_audio_pair.togglePlayback()
         return {'FINISHED'}
 
 class ClipsOperator(bpy.types.Operator):
@@ -280,7 +342,7 @@ class ObjectEmitterPanel(bpy.types.Panel):
     def _draw(self, context, layout, object):
         layout = layout.box()
         d = getattr(object, 'OMI_audio_pair', None)
-        print("clip", d.source, d.emitter)
+        # print("ObjectEmitterPanel._draw", d.source, d.emitter)
         ClipsOperator.target = object
         row = layout.split(factor=0.75)
         # row.operator_menu_enum(ClipsOperator.bl_idname, "clip", text=d.source.name if d.source else "", icon="SCENE")
@@ -289,7 +351,13 @@ class ObjectEmitterPanel(bpy.types.Panel):
         row = row.split(factor=0.5)
         remove_operator = row.operator("wm.reset_audio_pair", icon="X", text="")
         ResetAudioPair.target = object
-        op = row.operator("wm.omi_preview_emitter", icon="PLAY", text="")
+        if d.isPlaying():
+            ico = "MESH_PLANE" # FIXME: is there a better "STOP" icon?
+        else:
+            ico = "PLAY"
+        col = row.column()
+        op = col.operator("wm.omi_preview_emitter", icon=ico, text="")
+        col.enabled = os.path.exists(d.source.filename)
         PreviewEmitter.target = object
         # [layout.prop(d.source, n) for n in ['filename']] #'mimeType',
         if not d.source.filename: return
@@ -339,6 +407,13 @@ class ObjectEmitterPanel(bpy.types.Panel):
 #         ObjectEmitterPanel._draw(self, context, self.layout, context.scene)
 
 ### GLTF Export Screen
+# class OMIAudioExtensionProperties(bpy.types.PropertyGroup):
+#   enabled: bpy.props.BoolProperty(
+#         name="Export OMI Audio Components",
+#         description='Include this extension in the exported glTF file.',
+#         default=True
+#     )
+
 class OMIAudioGLTFExportPanel(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
     bl_region_type = 'TOOL_PROPS'
@@ -364,13 +439,13 @@ class OMIAudioGLTFExportPanel(bpy.types.Panel):
         layout.use_property_decorate = False  # No animation.
 
         pairs = OMIAudioEmitterExtension.gatherPairs(context)
-        layout.active = self.enabled.value
+        layout.active = context.scene.OMIExtensions.enabled
 
         box = layout.box()
         if len(pairs) == 0:
             box.label(text="(scene has no audio clips)")
 
-        for d in pairs:
+        for d in [d for d in pairs if d.source.filename]:
             box.label(text=d.source.filename)
 
 ###########################################################################

@@ -122,7 +122,9 @@ class glTF2ImportUserExtension:
 class glTF2ExportUserExtension:
     def __init__(self):
         print("ZYZYZYZYZYZYZYZY glTF2ExportUserExtension")
+
     def gather_scene_hook(self, scene, blender_scene, export_settings):
+        # NOTE: currently this forwards the blender scene node back into our gltf node handler
         print("ZYZYZYZYZYZYZYZY gather_scene_hook", scene.extensions)
         self.gather_node_hook(scene, blender_scene, export_settings)
 
@@ -141,6 +143,14 @@ class glTF2ExportUserExtension:
                 
         except Exception as e:
             print("glTF2ExportUserExtension error", e)
+
+    def gather_asset_hook(self, asset, export_settings):
+        print('[glTF2ExportUserExtension] gather_asset_hook', asset)
+        for extension in loaded_extensions:
+            try:
+                extension.gather_asset_hook(asset, export_settings)
+            except Exception as e:
+                print("[glTF2ExportUserExtension] gather_asset_hook error", extension, e)
 
     def gather_node_hook(self, node, blender_object, export_settings):
         print('[glTF2ExportUserExtension] gather_node_hook', node)

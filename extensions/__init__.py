@@ -3,18 +3,34 @@ from pkgutil import iter_modules
 from pathlib import Path
 from importlib import import_module
 
-from io_scene_gltf2.io.com.gltf2_io_extensions import Extension
 import bpy
 
 import os
 OMI_DEBUG = os.environ.get("OMI_DEBUG", False)
 
 class OMIExtension:
+    def __init__(self):
+        from io_scene_gltf2.io.com.gltf2_io_extensions import Extension
+        self.Extension = Extension
+
     def import_gltf_hook(self, root, importer):
         if OMI_DEBUG: print("OVERRIDE: import_gltf_hook", self)
         pass
     def import_node_hook(self, node, blender_object, import_settings):
         if OMI_DEBUG: print("OVERRIDE: import_node_hook", self)
+        pass
+
+    def gather_asset_hook(self, asset, export_settings):
+        if OMI_DEBUG: print("OVERRIDE: gather_asset_hook", self)
+        pass
+    def gather_scene_hook(self, root, blender_scene, export_settings):
+        if OMI_DEBUG: print("OVERRIDE: gather_scene_hook", self)
+        pass
+    def gather_node_hook(self, node, blender_object, export_settings):
+        if OMI_DEBUG: print("OVERRIDE: gather_node_hook", self)
+        pass
+    def gather_gltf_hook(self, root, export_settings):
+        if OMI_DEBUG: print("OVERRIDE: gather_gltf_hook", self)
         pass
 
     @staticmethod
@@ -35,9 +51,6 @@ class OMIExtension:
     def unregister_array(array):
         print("... unregister_all", array)
         OMIExtension.foreach(array, bpy.utils.unregister_class)
-    Extension = Extension
-
-OMIExtension.Extension = Extension
 
 # dynamically scan for registerable bpy.types
 def queryRegisterables(all):
