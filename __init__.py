@@ -138,7 +138,7 @@ class glTF2ExportUserExtension:
     def custom_gather_gltf_hook(self, root, export_settings):
         if root.asset.extras is None:
             root.asset.extras = {}
-        root.asset.extras["OMI_Blender_Exporter_Version"] = get_version_string()
+        root.asset.extras["OMI_Blender_GLTF_Version"] = get_version_string()
         print('[glTF2ExportUserExtension] custom_gather_gltf_hook', root)
         try:
             print('xxextensions', root.extensions)
