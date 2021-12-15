@@ -8,6 +8,10 @@ bl_info = {
     "warning" : "",
     "category" : "Import-Export"
 }
+
+def get_version_string():
+    return str(bl_info['version'][0]) + '.' + str(bl_info['version'][1]) + '.' + str(bl_info['version'][2])
+
 from .reload_package import reload_package
 if "bpy" in locals():
     reload_package(locals())
@@ -132,6 +136,9 @@ class glTF2ExportUserExtension:
         print('[glTF2ExportUserExtension] gather_gltf_hook', export_settings, plan)
 
     def custom_gather_gltf_hook(self, root, export_settings):
+        if root.asset.extras is None:
+            root.asset.extras = {}
+        root.asset.extras["OMI_Blender_Exporter_Version"] = get_version_string()
         print('[glTF2ExportUserExtension] custom_gather_gltf_hook', root)
         try:
             print('xxextensions', root.extensions)
