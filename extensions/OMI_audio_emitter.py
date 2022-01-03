@@ -67,7 +67,7 @@ class OMIAudioEmitterExtension(OMIExtension):
             'type': c.type,
             'gain': c.gain,
             'loop': c.loop,
-            'autoPlay': c.autoPlay,
+            'playing': c.playing,
             'source': sourceIndex,
             'coneInnerAngle': c.coneInnerAngle,
             'coneOuterAngle': c.coneOuterAngle,
@@ -263,7 +263,7 @@ class AudioEmitterProperties(bpy.types.PropertyGroup):
     )
     gain: bpy.props.FloatProperty(name="Gain")
     loop: bpy.props.BoolProperty(name="Loop")
-    autoPlay: bpy.props.BoolProperty(name="Autoplay")
+    playing: bpy.props.BoolProperty(name="Playing")
     coneInnerAngle: bpy.props.FloatProperty(name="coneInnerAngle", unit='ROTATION', subtype='ANGLE')
     coneOuterAngle: bpy.props.FloatProperty(name="coneOuterAngle", unit='ROTATION')
     coneOuterGain: bpy.props.FloatProperty(name="coneOuterGain")
@@ -364,7 +364,7 @@ class ObjectEmitterPanel(bpy.types.Panel):
         [layout.prop(d.emitter, n) for n in [
             'name',
             'type',
-            'gain', 'loop', 'autoPlay',
+            'gain', 'loop', 'playing',
             'coneInnerAngle', 'coneOuterAngle', 'coneOuterGain', 
             'distanceModel', 'maxDistance', 'refDistance', 'rolloffFactor']]
 
